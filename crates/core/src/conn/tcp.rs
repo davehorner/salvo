@@ -27,6 +27,9 @@ use crate::conn::openssl::OpensslListener;
 #[cfg(feature = "acme")]
 use crate::conn::acme::AcmeListener;
 
+#[cfg(windows)]
+use std::os::windows::prelude::AsRawSocket;
+
 /// `TcpListener` is used to create a TCP connection listener.
 pub struct TcpListener<T> {
     local_addr: T,
@@ -232,6 +235,13 @@ impl Acceptor for TcpAcceptor {
                 http_scheme: Scheme::HTTP,
             }
         })
+    }
+}
+
+#[cfg(windows)]
+impl AsRawSocket for TcpAcceptor {
+    fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
+        self.inner.as_raw_socket()
     }
 }
 
