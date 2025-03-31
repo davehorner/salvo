@@ -1,10 +1,14 @@
-//! Provide proxy support for Savlo web framework.
+//! Provide HTTP proxy capabilities for the Salvo web framework.
+//!
+//! This crate allows you to easily forward requests to upstream servers,
+//! supporting both HTTP and HTTPS protocols. It's useful for creating API gateways,
+//! load balancers, and reverse proxies.
 //!
 //! # Example
 //!
-//! In this example, if the requested URL begins with <http://127.0.0.1:5800/>, the proxy goes to
-//! <https://www.rust-lang.org>; if the requested URL begins with <http://localhost:5800/>, the proxy
-//! goes to <https://www.rust-lang.org>.
+//! In this example, requests to different hosts are proxied to different upstream servers:
+//! - Requests to http://127.0.0.1:5800/ are proxied to https://www.rust-lang.org
+//! - Requests to http://localhost:5800/ are proxied to https://crates.io
 //!
 //! ```no_run
 //! use salvo_core::prelude::*;
@@ -16,13 +20,13 @@
 //!         .push(
 //!             Router::new()
 //!                 .host("127.0.0.1")
-//!                 .path("<**rest>")
+//!                 .path("{**rest}")
 //!                 .goal(Proxy::use_hyper_client("https://www.rust-lang.org")),
 //!         )
 //!         .push(
 //!             Router::new()
 //!                 .host("localhost")
-//!                 .path("<**rest>")
+//!                 .path("{**rest}")
 //!                 .goal(Proxy::use_hyper_client("https://crates.io")),
 //!         );
 //!
@@ -36,14 +40,13 @@
 
 use std::convert::Infallible;
 use std::error::Error as StdError;
-use std::future::Future;
 
 use hyper::upgrade::OnUpgrade;
-use percent_encoding::{utf8_percent_encode, CONTROLS};
-use salvo_core::http::header::{HeaderMap, HeaderName, HeaderValue, CONNECTION, HOST, UPGRADE};
+use percent_encoding::{CONTROLS, utf8_percent_encode};
+use salvo_core::http::header::{CONNECTION, HOST, HeaderMap, HeaderName, HeaderValue, UPGRADE};
 use salvo_core::http::uri::Uri;
 use salvo_core::http::{ReqBody, ResBody, StatusCode};
-use salvo_core::{async_trait, BoxedError, Depot, Error, FlowCtrl, Handler, Request, Response};
+use salvo_core::{BoxedError, Depot, Error, FlowCtrl, Handler, Request, Response, async_trait};
 
 #[macro_use]
 mod cfg;
@@ -71,11 +74,15 @@ pub(crate) fn encode_url_path(path: &str) -> String {
         .join("/")
 }
 
-/// Client trait.
+/// Client trait for implementing different HTTP clients for proxying.
+///
+/// Implement this trait to create custom proxy clients with different
+/// backends or configurations.
 pub trait Client: Send + Sync + 'static {
-    /// Error type.
+    /// Error type returned by the client.
     type Error: StdError + Send + Sync + 'static;
-    /// Elect a upstream to process current request.
+
+    /// Execute a request through the proxy client.
     fn execute(
         &self,
         req: HyperRequest,
@@ -83,11 +90,16 @@ pub trait Client: Send + Sync + 'static {
     ) -> impl Future<Output = Result<HyperResponse, Self::Error>> + Send;
 }
 
-/// Upstreams trait.
+/// Upstreams trait for selecting target servers.
+///
+/// Implement this trait to customize how target servers are selected
+/// for proxying requests. This can be used to implement load balancing,
+/// failover, or other server selection strategies.
 pub trait Upstreams: Send + Sync + 'static {
-    /// Error type.
+    /// Error type returned when selecting a server fails.
     type Error: StdError + Send + Sync + 'static;
-    /// Elect a upstream to process current request.
+
+    /// Elect a server to handle the current request.
     fn elect(&self) -> impl Future<Output = Result<&str, Self::Error>> + Send;
 }
 impl Upstreams for &'static str {
@@ -135,7 +147,7 @@ pub type UrlPartGetter = Box<dyn Fn(&Request, &Depot) -> Option<String> + Send +
 /// Default url path getter.
 ///
 /// This getter will get the last param as the rest url path from request.
-/// In most case you should use wildcard param, like `<**rest>`, `<*+rest>`.
+/// In most case you should use wildcard param, like `{**rest}`, `{*+rest}`.
 pub fn default_url_path_getter(req: &Request, _depot: &Depot) -> Option<String> {
     req.params().tail().map(encode_url_path)
 }
@@ -320,9 +332,9 @@ where
                             body,
                         ) = response.into_parts();
                         res.status_code(status);
-                        for (name, value) in headers {
-                            if let Some(name) = name {
-                                res.headers.insert(name, value);
+                        for name in headers.keys() {
+                            for value in headers.get_all(name) {
+                                res.headers.append(name, value.to_owned());
                             }
                         }
                         res.body(body);

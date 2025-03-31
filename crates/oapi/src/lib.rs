@@ -35,9 +35,6 @@ cfg_feature! {
     pub mod redoc;
 }
 
-#[doc = include_str!("../docs/endpoint.md")]
-pub use salvo_oapi_macros::endpoint;
-pub(crate) use salvo_oapi_macros::schema;
 #[doc = include_str!("../docs/derive_to_parameters.md")]
 pub use salvo_oapi_macros::ToParameters;
 #[doc = include_str!("../docs/derive_to_response.md")]
@@ -46,6 +43,9 @@ pub use salvo_oapi_macros::ToResponse;
 pub use salvo_oapi_macros::ToResponses;
 #[doc = include_str!("../docs/derive_to_schema.md")]
 pub use salvo_oapi_macros::ToSchema;
+#[doc = include_str!("../docs/endpoint.md")]
+pub use salvo_oapi_macros::endpoint;
+pub(crate) use salvo_oapi_macros::schema;
 
 use std::collections::{BTreeMap, HashMap, LinkedList};
 use std::marker::PhantomData;
@@ -191,6 +191,19 @@ impl_to_schema_primitive!(
 );
 impl_to_schema!(&str);
 
+impl_to_schema!(std::net::Ipv4Addr);
+impl_to_schema!(std::net::Ipv6Addr);
+
+impl ToSchema for std::net::IpAddr {
+    fn to_schema(components: &mut Components) -> RefOr<schema::Schema> {
+        crate::RefOr::Type(Schema::OneOf(
+            OneOf::default()
+                .item(std::net::Ipv4Addr::to_schema(components))
+                .item(std::net::Ipv6Addr::to_schema(components)),
+        ))
+    }
+}
+
 #[cfg(feature = "chrono")]
 impl_to_schema_primitive!(chrono::NaiveDate, chrono::Duration, chrono::NaiveDateTime);
 #[cfg(feature = "chrono")]
@@ -199,6 +212,8 @@ impl<T: chrono::TimeZone> ToSchema for chrono::DateTime<T> {
         schema!(#[inline] DateTime<T>).into()
     }
 }
+#[cfg(feature = "compact_str")]
+impl_to_schema_primitive!(compact_str::CompactString);
 #[cfg(any(feature = "decimal", feature = "decimal-float"))]
 impl_to_schema!(rust_decimal::Decimal);
 #[cfg(feature = "url")]

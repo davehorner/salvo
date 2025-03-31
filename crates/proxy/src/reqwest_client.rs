@@ -9,6 +9,10 @@ use tokio::io::copy_bidirectional;
 use crate::{Client, HyperRequest, BoxedError, Proxy, Upstreams, HyperResponse};
 
 /// A [`Client`] implementation based on [`reqwest::Client`].
+/// 
+/// This client provides proxy capabilities using the Reqwest HTTP client.
+/// It supports all features of Reqwest including automatic redirect handling,
+/// connection pooling, and other HTTP client features.
 #[derive(Default, Clone, Debug)]
 pub struct ReqwestClient {
     inner: InnerClient,
@@ -19,7 +23,9 @@ where
     U: Upstreams,
     U::Error: Into<BoxedError>,
 {
-    /// Create new `Proxy` which use default reqwest util client.
+    /// Create a new `Proxy` using the default Reqwest client.
+    /// 
+    /// This is a convenient way to create a proxy with standard configuration.
     pub fn use_reqwest_client(upstreams: U) -> Self {
         Proxy::new(upstreams, ReqwestClient::default())
     }
@@ -58,7 +64,7 @@ impl Client for ReqwestClient {
         let mut hyper_response = if response.status() == StatusCode::SWITCHING_PROTOCOLS {
             let response_upgrade_type = crate::get_upgrade_type(response.headers());
 
-            if request_upgrade_type.as_deref() == response_upgrade_type {
+            if request_upgrade_type == response_upgrade_type.map(|s| s.to_lowercase()) {
                 let mut response_upgraded = response
                     .upgrade()
                     .await
@@ -115,7 +121,7 @@ mod tests {
     #[tokio::test]
     async fn test_reqwest_client() {
         let router = Router::new().push(
-            Router::with_path("rust/<**rest>").goal(Proxy::new(vec!["https://www.rust-lang.org"], ReqwestClient::default())),
+            Router::with_path("rust/{**rest}").goal(Proxy::new(vec!["https://www.rust-lang.org"], ReqwestClient::default())),
         );
 
         let content = TestClient::get("http://127.0.0.1:5801/rust/tools/install")

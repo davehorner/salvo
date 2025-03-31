@@ -1,10 +1,9 @@
 use std::cmp;
 use std::error::Error as StdError;
-use std::future::Future;
 use std::io::{Error as IoError, ErrorKind, IoSlice, Result as IoResult};
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::task::{self, ready, Context, Poll};
+use std::task::{self, Context, Poll, ready};
 
 use bytes::{Buf, Bytes};
 
@@ -238,7 +237,7 @@ impl HttpBuilder {
 
 #[allow(dead_code)]
 #[allow(clippy::future_not_send)]
-pub(crate) async fn read_version<'a, A>(mut reader: A) -> IoResult<(Version, Rewind<A>)>
+pub(crate) async fn read_version<A>(mut reader: A) -> IoResult<(Version, Rewind<A>)>
 where
     A: AsyncRead + Unpin,
 {
@@ -288,7 +287,7 @@ where
         if this.buf.filled() == H2_PREFACE {
             *this.version = Version::HTTP_2;
         }
-        return Poll::Ready(Ok((*this.version, this.buf.filled().to_vec())));
+        Poll::Ready(Ok((*this.version, this.buf.filled().to_vec())))
     }
 }
 

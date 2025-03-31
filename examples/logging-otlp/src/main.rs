@@ -1,20 +1,15 @@
 use anyhow::Result;
-use opentelemetry::KeyValue;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{
-    runtime,
-    trace::{self, RandomIdGenerator, Tracer},
-    Resource,
-};
+use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+use opentelemetry_otlp::{LogExporter, WithExportConfig};
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::logs::SdkLoggerProvider;
 use salvo::logging::Logger;
 use salvo::prelude::*;
 use tracing::{instrument, level_filters::LevelFilter};
-use tracing_subscriber::{
-    fmt::{self, format::FmtSpan},
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    Layer,
-};
+use tracing_subscriber::Layer;
+use tracing_subscriber::fmt::{self, format::FmtSpan};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[instrument(fields(http.uri = req.uri().path(), http.method = req.method().as_str()))]
 #[handler]
@@ -39,13 +34,12 @@ async fn main() -> Result<()> {
         .with_filter(LevelFilter::INFO);
 
     // opentelemetry tracing layer for tracing-subscriber
-    let tracer = init_tracer()?;
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    let provider = init_tracer_provider()?;
 
     tracing_subscriber::registry()
         .with(console)
         .with(file)
-        .with(opentelemetry)
+        .with(OpenTelemetryTracingBridge::new(&provider))
         .init();
 
     let router = Router::new().get(hello);
@@ -56,24 +50,18 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn init_tracer() -> anyhow::Result<Tracer> {
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint("http://localhost:4317"),
+fn init_tracer_provider() -> anyhow::Result<SdkLoggerProvider> {
+    let exporter = LogExporter::builder()
+        .with_tonic()
+        .with_endpoint("http://localhost:4317")
+        .build()?;
+    let provider = SdkLoggerProvider::builder()
+        .with_batch_exporter(exporter)
+        .with_resource(
+            Resource::builder()
+                .with_service_name("salvo-tracing")
+                .build(),
         )
-        .with_trace_config(
-            trace::config()
-                .with_id_generator(RandomIdGenerator::default())
-                .with_max_events_per_span(32)
-                .with_max_attributes_per_span(64)
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "salvo-tracing",
-                )])),
-        )
-        .install_batch(runtime::Tokio)?;
-    Ok(tracer)
+        .build();
+    Ok(provider)
 }

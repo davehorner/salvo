@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -8,14 +7,14 @@ use http::uri::Scheme;
 use hyper::service::Service as HyperService;
 use hyper::{Method, Request as HyperRequest, Response as HyperResponse};
 
-use crate::catcher::{write_error_default, Catcher};
+use crate::catcher::{Catcher, write_error_default};
 use crate::conn::SocketAddr;
 use crate::fuse::ArcFusewire;
 use crate::handler::{Handler, WhenHoop};
 use crate::http::body::{ReqBody, ResBody};
 use crate::http::{Mime, Request, Response, StatusCode};
 use crate::routing::{FlowCtrl, PathState, Router};
-use crate::{async_trait, Depot};
+use crate::{Depot, async_trait};
 
 /// Service http request.
 #[non_exhaustive]
@@ -24,7 +23,7 @@ pub struct Service {
     pub router: Arc<Router>,
     /// The catcher of this service.
     pub catcher: Option<Arc<Catcher>>,
-    /// These hoops will alwways be called when request received.
+    /// These hoops will always be called when request received.
     pub hoops: Vec<Arc<dyn Handler>>,
     /// The allowed media types of this service.
     pub allowed_media_types: Arc<Vec<Mime>>,
@@ -88,7 +87,7 @@ impl Service {
 
     /// Add a handler as middleware, it will run the handler when request received.
     ///
-    /// This middleware only effective when the filter return true.
+    /// This middleware is only effective when the filter returns true..
     #[inline]
     pub fn hoop_when<H, F>(mut self, hoop: H, filter: F) -> Self
     where
@@ -204,7 +203,7 @@ pub struct HyperHandler {
 }
 impl HyperHandler {
     /// Handle [`Request`] and returns [`Response`].
-    pub fn handle(&self, mut req: Request) -> impl Future<Output = Response> {
+    pub fn handle(&self, mut req: Request) -> impl Future<Output = Response> + 'static {
         let catcher = self.catcher.clone();
         let allowed_media_types = self.allowed_media_types.clone();
         req.local_addr = self.local_addr.clone();
@@ -226,6 +225,10 @@ impl HyperHandler {
         async move {
             if let Some(dm) = router.detect(&mut req, &mut path_state).await {
                 req.params = path_state.params;
+                #[cfg(feature = "matched-path")]
+                {
+                    req.matched_path = path_state.matched_parts.join("/");
+                }
                 // Set default status code before service hoops executed.
                 // We hope all hoops in service can get the correct status code.
                 let mut ctrl = FlowCtrl::new(
@@ -246,7 +249,7 @@ impl HyperHandler {
                 req.params = path_state.params;
                 // Set default status code before service hoops executed.
                 // We hope all hoops in service can get the correct status code.
-                if path_state.has_any_goal {
+                if path_state.once_ended {
                     res.status_code = Some(StatusCode::METHOD_NOT_ALLOWED);
                 } else {
                     res.status_code = Some(StatusCode::NOT_FOUND);
@@ -254,10 +257,10 @@ impl HyperHandler {
                 let mut ctrl = FlowCtrl::new(hoops);
                 ctrl.call_next(&mut req, &mut depot, &mut res).await;
                 // Set it to default status code again if any hoop set status code to None.
-                if res.status_code.is_none() && path_state.has_any_goal {
+                if res.status_code.is_none() && path_state.once_ended {
                     res.status_code = Some(StatusCode::METHOD_NOT_ALLOWED);
                 }
-            } else if path_state.has_any_goal {
+            } else if path_state.once_ended {
                 res.status_code = Some(StatusCode::METHOD_NOT_ALLOWED);
             }
 
@@ -313,30 +316,29 @@ impl HyperHandler {
             }
             #[cfg(debug_assertions)]
             if Method::HEAD == *req.method() && !res.body.is_none() {
-                tracing::warn!("request with head method should not have body: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/HEAD");
+                tracing::warn!(
+                    "request with head method should not have body: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/HEAD"
+                );
             }
             #[cfg(feature = "quinn")]
             {
                 use bytes::Bytes;
                 use std::sync::Mutex;
-                if let Some(session) = req.extensions.remove::<Arc<
-                    crate::proto::WebTransportSession<salvo_http3::http3_quinn::Connection, Bytes>,
-                >>() {
+                if let Some(session) =
+                    req.extensions.remove::<Arc<
+                        crate::proto::WebTransportSession<salvo_http3::quinn::Connection, Bytes>,
+                    >>()
+                {
                     res.extensions.insert(session);
                 }
                 if let Some(conn) = req.extensions.remove::<Arc<
-                    Mutex<
-                        salvo_http3::server::Connection<
-                            salvo_http3::http3_quinn::Connection,
-                            Bytes,
-                        >,
-                    >,
+                    Mutex<salvo_http3::server::Connection<salvo_http3::quinn::Connection, Bytes>>,
                 >>() {
                     res.extensions.insert(conn);
                 }
                 if let Some(stream) = req.extensions.remove::<Arc<
                     salvo_http3::server::RequestStream<
-                        salvo_http3::http3_quinn::BidiStream<Bytes>,
+                        salvo_http3::quinn::BidiStream<Bytes>,
                         Bytes,
                     >,
                 >>() {
@@ -467,5 +469,64 @@ mod tests {
         assert_eq!(content, "before1before2");
         let content = access(&service, "3").await;
         assert_eq!(content, "before1before2before3");
+    }
+
+    #[tokio::test]
+    async fn test_service_405_or_404_error() {
+        #[handler]
+        async fn login() -> &'static str {
+            "login"
+        }
+        #[handler]
+        async fn hello() -> &'static str {
+            "hello"
+        }
+        let router = Router::new()
+            .push(Router::with_path("hello").goal(hello))
+            .push(
+                Router::with_path("login")
+                    .post(login)
+                    .push(Router::with_path("user").get(login)),
+            );
+        let service = Service::new(router);
+
+        let res = TestClient::get("http://127.0.0.1:5801/hello")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::OK);
+        let res = TestClient::put("http://127.0.0.1:5801/hello")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::OK);
+
+        let res = TestClient::post("http://127.0.0.1:5801/login")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::OK);
+
+        let res = TestClient::get("http://127.0.0.1:5801/login")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::METHOD_NOT_ALLOWED);
+
+        let res = TestClient::get("http://127.0.0.1:5801/login2")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::NOT_FOUND);
+
+        let res = TestClient::get("http://127.0.0.1:5801/login/user")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::OK);
+
+        let res = TestClient::post("http://127.0.0.1:5801/login/user")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::METHOD_NOT_ALLOWED);
+
+        let res = TestClient::post("http://127.0.0.1:5801/login/user1")
+            .send(&service)
+            .await;
+        assert_eq!(res.status_code.unwrap(), StatusCode::NOT_FOUND);
     }
 }

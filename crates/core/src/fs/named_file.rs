@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
-use enumflags2::{bitflags, BitFlags};
+use enumflags2::{BitFlags, bitflags};
 use headers::*;
 use tokio::fs::File;
 
@@ -17,7 +17,7 @@ use crate::http::header::{
     CONTENT_DISPOSITION, CONTENT_ENCODING, CONTENT_TYPE, IF_NONE_MATCH, RANGE,
 };
 use crate::http::{HttpRange, Mime, Request, Response, StatusCode, StatusError};
-use crate::{async_trait, Depot, Error, Result, Writer};
+use crate::{Depot, Error, Result, Writer, async_trait};
 
 const CHUNK_SIZE: u64 = 1024 * 1024;
 
@@ -239,7 +239,7 @@ fn build_content_disposition(
                 .unwrap_or_else(|| "file".into())
                 .into(),
         };
-        format!("attachment; filename={attached_name}")
+        format!(r#"attachment; filename="{attached_name}""#)
             .parse::<HeaderValue>()
             .map_err(Error::other)?
     } else {
@@ -509,7 +509,7 @@ impl NamedFile {
 
         if offset != 0 || length != self.metadata.len() || range.is_some() {
             res.status_code(StatusCode::PARTIAL_CONTENT);
-            match ContentRange::bytes(offset..offset + length - 1, self.metadata.len()) {
+            match ContentRange::bytes(offset..offset + length, self.metadata.len()) {
                 Ok(content_range) => {
                     res.headers_mut().typed_insert(content_range);
                 }

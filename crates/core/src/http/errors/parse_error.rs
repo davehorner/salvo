@@ -6,7 +6,7 @@ use serde::de::value::Error as DeError;
 use thiserror::Error;
 
 use crate::http::{Request, Response, StatusError};
-use crate::{async_trait, BoxedError, Depot, Writer};
+use crate::{BoxedError, Depot, Writer, async_trait};
 
 /// Result type with `ParseError` has it's error type.
 pub type ParseResult<T> = Result<T, ParseError>;
@@ -31,7 +31,7 @@ pub enum ParseError {
     #[error("Parse error when parse from str.")]
     ParseFromStr,
 
-    //// A possible error value when converting a `StatusCode` from a `u16` or `&str`
+    /// A possible error value when converting a `StatusCode` from a `u16` or `&str`
     /// This error indicates that the supplied input was not a valid number, was less
     /// than 100, or was greater than 999.
     #[error("invalid StatusCode: {0}")]

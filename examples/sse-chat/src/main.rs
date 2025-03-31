@@ -4,8 +4,8 @@
 // port from https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use futures_util::StreamExt;
 use parking_lot::Mutex;
@@ -27,7 +27,7 @@ async fn main() {
     let router = Router::new().goal(index).push(
         Router::with_path("chat")
             .get(user_connected)
-            .push(Router::with_path("<id>").post(chat_send)),
+            .push(Router::with_path("{id}").post(chat_send)),
     );
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;

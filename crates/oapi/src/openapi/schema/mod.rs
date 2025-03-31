@@ -512,6 +512,8 @@ pub enum KnownFormat {
     Duration,
     /// Hint to UI to obscure input.
     Password,
+    /// Use for compact string
+    String,
     /// Used with [`String`] values to indicate value is in decimal format.
     ///
     /// **decimal** feature need to be enabled.
@@ -582,7 +584,7 @@ pub enum KnownFormat {
 #[cfg(test)]
 mod tests {
     use assert_json_diff::assert_json_eq;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::*;
     use crate::*;

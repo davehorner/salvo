@@ -1,4 +1,4 @@
-//! CSRF middleware for Savlo web framework.
+//! CSRF middleware for Salvo web framework.
 //!
 //! CSRF middleware for Salvo that provides CSRF (Cross-Site Request Forgery) protection.
 //!
@@ -11,17 +11,16 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::error::Error as StdError;
-use std::future::Future;
 
 mod finder;
 
 pub use finder::{CsrfTokenFinder, FormFinder, HeaderFinder, JsonFinder};
 
-use rand::distributions::Standard;
 use rand::Rng;
+use rand::distr::StandardUniform;
 use salvo_core::handler::Skipper;
 use salvo_core::http::{Method, StatusCode};
-use salvo_core::{async_trait, Depot, FlowCtrl, Handler, Request, Response};
+use salvo_core::{Depot, FlowCtrl, Handler, Request, Response, async_trait};
 
 #[macro_use]
 mod cfg;
@@ -190,7 +189,7 @@ pub trait CsrfCipher: Send + Sync + 'static {
 
     /// Generate a random bytes.
     fn random_bytes(&self, len: usize) -> Vec<u8> {
-        rand::thread_rng().sample_iter(Standard).take(len).collect()
+        rand::rng().sample_iter(StandardUniform).take(len).collect()
     }
 }
 

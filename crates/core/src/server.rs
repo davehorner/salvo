@@ -1,5 +1,4 @@
 //! Server module
-use std::future::Future;
 use std::io::Result as IoResult;
 #[cfg(feature = "server-handle")]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -55,7 +54,7 @@ impl ServerHandle {
     /// It ensures that all connections are closed properly and any resources are released.
     ///
     /// You can specify a timeout to force stop server.
-    /// If `timeout` is `None`, it will wait util all connections are closed.
+    /// If `timeout` is `None`, it will wait until all connections are closed.
     ///
     /// This function gracefully stop the server, allowing it to finish processing any
     /// ongoing requests before terminating. It ensures that all connections are closed
@@ -166,7 +165,7 @@ impl<A: Acceptor + Send> Server<A> {
         ///
         /// Call this function will stop server after all connections are closed.
         /// You can specify a timeout to force stop server.
-        /// If `timeout` is `None`, it will wait util all connections are closed.
+        /// If `timeout` is `None`, it will wait until all connections are closed.
         pub fn stop_graceful(&self, timeout: impl Into<Option<Duration>>) {
             let _ = self.tx_cmd.send(ServerCommand::StopGraceful(timeout.into()));
         }
@@ -208,7 +207,6 @@ impl<A: Acceptor + Send> Server<A> {
     ///
     /// ```no_run
     /// use salvo_core::prelude::*;
-
     /// #[handler]
     /// async fn hello() -> &'static str {
     ///     "Hello World"
@@ -415,11 +413,11 @@ mod tests {
             res.render(Json(User { name: "jobs".into() }));
         }
         let router = Router::new().get(hello).push(Router::with_path("json").get(json));
-        let serivce = Service::new(router);
+        let service = Service::new(router);
 
         let base_url = "http://127.0.0.1:5800";
         let result = TestClient::get(base_url)
-            .send(&serivce)
+            .send(&service)
             .await
             .take_string()
             .await
@@ -427,7 +425,7 @@ mod tests {
         assert_eq!(result, "Hello World");
 
         let result = TestClient::get(format!("{}/json", base_url))
-            .send(&serivce)
+            .send(&service)
             .await
             .take_string()
             .await
@@ -435,7 +433,7 @@ mod tests {
         assert_eq!(result, r#"{"name":"jobs"}"#);
 
         let result = TestClient::get(format!("{}/not_exist", base_url))
-            .send(&serivce)
+            .send(&service)
             .await
             .take_string()
             .await
@@ -443,7 +441,7 @@ mod tests {
         assert!(result.contains("Not Found"));
         let result = TestClient::get(format!("{}/not_exist", base_url))
             .add_header("accept", "application/json", true)
-            .send(&serivce)
+            .send(&service)
             .await
             .take_string()
             .await
@@ -451,7 +449,7 @@ mod tests {
         assert!(result.contains(r#""code":404"#));
         let result = TestClient::get(format!("{}/not_exist", base_url))
             .add_header("accept", "text/plain", true)
-            .send(&serivce)
+            .send(&service)
             .await
             .take_string()
             .await
@@ -459,7 +457,7 @@ mod tests {
         assert!(result.contains("code: 404"));
         let result = TestClient::get(format!("{}/not_exist", base_url))
             .add_header("accept", "application/xml", true)
-            .send(&serivce)
+            .send(&service)
             .await
             .take_string()
             .await

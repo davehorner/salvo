@@ -7,9 +7,12 @@ use salvo_core::rt::tokio::TokioIo;
 use salvo_core::Error;
 use tokio::io::copy_bidirectional;
 
-use crate::{Client, HyperRequest,Proxy, BoxedError, Upstreams,HyperResponse};
+use crate::{Client, HyperRequest, Proxy, BoxedError, Upstreams, HyperResponse};
 
 /// A [`Client`] implementation based on [`hyper_util::client::legacy::Client`].
+/// 
+/// This client provides proxy capabilities using the Hyper HTTP client library.
+/// It's lightweight and tightly integrated with the Tokio runtime.
 #[derive(Clone, Debug)]
 pub struct HyperClient {
     inner: HyperUtilClient<HttpsConnector<HttpConnector>, ReqBody>,
@@ -34,7 +37,9 @@ where
     U: Upstreams,
     U::Error: Into<BoxedError>,
 {
-    /// Create new `Proxy` which use default hyper util client.
+    /// Create a new `Proxy` using the default Hyper client.
+    /// 
+    /// This is a convenient way to create a proxy with standard configuration.
     pub fn use_hyper_client(upstreams: U) -> Self {
         Proxy::new(upstreams, HyperClient::default())
     }
@@ -61,7 +66,7 @@ impl Client for HyperClient {
 
         if response.status() == StatusCode::SWITCHING_PROTOCOLS {
             let response_upgrade_type = crate::get_upgrade_type(response.headers());
-            if request_upgrade_type.as_deref() == response_upgrade_type {
+            if request_upgrade_type == response_upgrade_type.map(|s| s.to_lowercase()) {
                 let response_upgraded = hyper::upgrade::on(&mut response).await?;
                 if let Some(request_upgraded) = request_upgraded {
                     tokio::spawn(async move {
@@ -111,7 +116,7 @@ mod tests {
     #[tokio::test]
     async fn test_hyper_client() {
         let router = Router::new().push(
-            Router::with_path("rust/<**rest>").goal(Proxy::new(vec!["https://www.rust-lang.org"], HyperClient::default())),
+            Router::with_path("rust/{**rest}").goal(Proxy::new(vec!["https://www.rust-lang.org"], HyperClient::default())),
         );
 
         let content = TestClient::get("http://127.0.0.1:5801/rust/tools/install")
@@ -120,6 +125,7 @@ mod tests {
             .take_string()
             .await
             .unwrap();
+        println!("{}", content);
         assert!(content.contains("Install Rust"));
     }
 

@@ -1,21 +1,23 @@
-use opentelemetry::{global, trace::TracerProvider as _, KeyValue};
-use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::TracerProvider, Resource};
+use opentelemetry::global;
+use opentelemetry::trace::TracerProvider;
+use opentelemetry_sdk::trace::SdkTracerProvider;
+use opentelemetry_sdk::{Resource, propagation::TraceContextPropagator};
 use salvo::otel::{Metrics, Tracing};
 use salvo::prelude::*;
 
 mod exporter;
 use exporter::Exporter;
 
-fn init_tracer_provider() -> TracerProvider {
+fn init_tracer_provider() -> SdkTracerProvider {
     global::set_text_map_propagator(TraceContextPropagator::new());
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
-            Resource::new(vec![KeyValue::new("service.name", "server2")]),
-        ))
-        .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-        .install_batch(opentelemetry_sdk::runtime::Tokio)
-        .unwrap()
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .build()
+        .expect("failed to create exporter");
+    SdkTracerProvider::builder()
+        .with_resource(Resource::builder().with_service_name("server2").build())
+        .with_batch_exporter(exporter)
+        .build()
 }
 
 #[handler]

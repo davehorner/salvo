@@ -8,11 +8,13 @@ use std::sync::OnceLock;
 use bytes::Bytes;
 #[cfg(feature = "cookie")]
 use cookie::{Cookie, CookieJar};
-use http::header::{AsHeaderName, HeaderMap, HeaderValue, IntoHeaderName, CONTENT_TYPE};
-use http::method::Method;
-pub use http::request::Parts;
-use http::uri::{Scheme, Uri};
 use http::Extensions;
+use http::header::{AsHeaderName, CONTENT_TYPE, HeaderMap, HeaderValue, IntoHeaderName};
+use http::method::Method;
+use http::uri::{Scheme, Uri};
+
+pub use http::request::Parts;
+
 use http_body_util::{BodyExt, Limited};
 use multimap::MultiMap;
 use parking_lot::RwLock;
@@ -28,7 +30,7 @@ use crate::routing::PathParams;
 use crate::serde::{
     from_request, from_str_map, from_str_multi_map, from_str_multi_val, from_str_val,
 };
-use crate::{async_trait, Depot, Error, FlowCtrl, Handler};
+use crate::{Depot, Error, FlowCtrl, Handler, async_trait};
 
 static GLOBAL_SECURE_MAX_SIZE: RwLock<usize> = RwLock::new(64 * 1024);
 
@@ -101,7 +103,6 @@ pub struct Request {
 
     pub(crate) params: PathParams,
 
-    // accept: Option<Vec<Mime>>,
     pub(crate) queries: OnceLock<MultiMap<String, String>>,
     pub(crate) form_data: tokio::sync::OnceCell<FormData>,
     pub(crate) payload: tokio::sync::OnceCell<Bytes>,
@@ -113,6 +114,8 @@ pub struct Request {
     pub(crate) remote_addr: SocketAddr,
 
     pub(crate) secure_max_size: Option<usize>,
+    #[cfg(feature = "matched-path")]
+    pub(crate) matched_path: String,
 }
 
 impl Debug for Request {
@@ -159,6 +162,8 @@ impl Request {
             local_addr: SocketAddr::Unknown,
             remote_addr: SocketAddr::Unknown,
             secure_max_size: None,
+            #[cfg(feature = "matched-path")]
+            matched_path: Default::default(),
         }
     }
     #[doc(hidden)]
@@ -223,6 +228,8 @@ impl Request {
             version,
             scheme,
             secure_max_size: None,
+            #[cfg(feature = "matched-path")]
+            matched_path: Default::default(),
         }
     }
 
@@ -386,6 +393,21 @@ impl Request {
         &mut self.local_addr
     }
 
+    cfg_feature! {
+        #![feature = "matched-path"]
+
+        /// Get matched path.
+        #[inline]
+        pub fn matched_path(&self) -> &str {
+            &self.matched_path
+        }
+        /// Get mutable matched path.
+        #[inline]
+        pub fn matched_path_mut(&mut self) -> &mut String {
+            &mut self.matched_path
+        }
+    }
+
     /// Returns a reference to the associated header field map.
     ///
     /// # Examples
@@ -524,11 +546,11 @@ impl Request {
         }
 
         /// Try to get a WebTransport session from the request.
-        pub async fn web_transport_mut(&mut self) -> Result<&mut crate::proto::WebTransportSession<salvo_http3::http3_quinn::Connection, Bytes>, crate::Error> {
+        pub async fn web_transport_mut(&mut self) -> Result<&mut crate::proto::WebTransportSession<salvo_http3::quinn::Connection, Bytes>, crate::Error> {
             if self.is_wt_connect() {
-                if self.extensions.get::<crate::proto::WebTransportSession<salvo_http3::http3_quinn::Connection, Bytes>>().is_none() {
-                    let conn = self.extensions.remove::<Arc<std::sync::Mutex<salvo_http3::server::Connection<salvo_http3::http3_quinn::Connection, Bytes>>>>();
-                    let stream = self.extensions.remove::<Arc<salvo_http3::server::RequestStream<salvo_http3::http3_quinn::BidiStream<Bytes>, Bytes>>>();
+                if self.extensions.get::<crate::proto::WebTransportSession<salvo_http3::quinn::Connection, Bytes>>().is_none() {
+                    let conn = self.extensions.remove::<Arc<std::sync::Mutex<salvo_http3::server::Connection<salvo_http3::quinn::Connection, Bytes>>>>();
+                    let stream = self.extensions.remove::<Arc<salvo_http3::server::RequestStream<salvo_http3::quinn::BidiStream<Bytes>, Bytes>>>();
                     match (conn, stream) {
                         (Some(conn), Some(stream)) => {
                             if let Some(conn) = Arc::into_inner(conn) {
@@ -536,7 +558,7 @@ impl Request {
                                     if let Some(stream) = Arc::into_inner(stream) {
                                         let session =  crate::proto::WebTransportSession::accept(stream, conn).await?;
                                         self.extensions.insert(Arc::new(session));
-                                        if let Some(session) = self.extensions.get_mut::<Arc<crate::proto::WebTransportSession<salvo_http3::http3_quinn::Connection, Bytes>>>() {
+                                        if let Some(session) = self.extensions.get_mut::<Arc<crate::proto::WebTransportSession<salvo_http3::quinn::Connection, Bytes>>>() {
                                             if let Some(session) = Arc::get_mut(session) {
                                                 Ok(session)
                                             } else {
@@ -565,7 +587,7 @@ impl Request {
                         }
                         (None, None) => Err(crate::Error::Other("invalid web transport without connection and stream".into())),
                     }
-                } else if let Some(session) = self.extensions.get_mut::<crate::proto::WebTransportSession<salvo_http3::http3_quinn::Connection, Bytes>>() {
+                } else if let Some(session) = self.extensions.get_mut::<crate::proto::WebTransportSession<salvo_http3::quinn::Connection, Bytes>>() {
                     Ok(session)
                 } else {
                     Err(crate::Error::Other("invalid web transport".into()))
@@ -829,7 +851,7 @@ impl Request {
     pub async fn try_all_files(&mut self) -> ParseResult<Vec<&FilePart>> {
         self.form_data()
             .await
-            .map(|ps| ps.files.iter().map(|(_, f)| f).collect())
+            .map(|ps| ps.files.flat_iter().map(|(_, f)| f).collect())
     }
 
     /// Get request payload with default max size limit(64KB).

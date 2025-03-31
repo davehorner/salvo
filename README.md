@@ -1,35 +1,38 @@
 <div align="center">
-<p><img alt="Savlo" width="132" style="max-width:40%;min-width:60px;" src="https://salvo.rs/images/logo-text.svg" /></p>
+<p><img alt="Salvo" width="132" style="max-width:40%;min-width:60px;" src="https://salvo.rs/images/logo-text.svg" /></p>
 <p>
     <a href="https://github.com/salvo-rs/salvo/blob/main/README.md">English</a>&nbsp;&nbsp;
-    <a href="https://github.com/salvo-rs/salvo/blob/main/README.zh-hans.md">简体中文</a>&nbsp;&nbsp;
+    <a href="https://github.com/salvo-rs/salvo/blob/main/README.zh.md">简体中文</a>&nbsp;&nbsp;
     <a href="https://github.com/salvo-rs/salvo/blob/main/README.zh-hant.md">繁體中文</a>
 </p>
 <p>
 <a href="https://github.com/salvo-rs/salvo/actions">
-    <img alt="build status" src="https://github.com/salvo-rs/salvo/workflows/ci-linux/badge.svg?branch=main&event=push" />
+    <img alt="build status" src="https://github.com/salvo-rs/salvo/workflows/ci-linux/badge.svg" />
 </a>
 <a href="https://github.com/salvo-rs/salvo/actions">
-    <img alt="build status" src="https://github.com/salvo-rs/salvo/workflows/ci-macos/badge.svg?branch=main&event=push" />
+    <img alt="build status" src="https://github.com/salvo-rs/salvo/workflows/ci-macos/badge.svg" />
 </a>
 <a href="https://github.com/salvo-rs/salvo/actions">
-    <img alt="build status" src="https://github.com/salvo-rs/salvo/workflows/ci-windows/badge.svg?branch=main&event=push" />
+    <img alt="build status" src="https://github.com/salvo-rs/salvo/workflows/ci-windows/badge.svg" />
 </a>
+<a href="https://codecov.io/gh/salvo-rs/salvo"><img alt="codecov" src="https://codecov.io/gh/salvo-rs/salvo/branch/main/graph/badge.svg" /></a>
 <br>
-<a href="https://discord.gg/G8KfmS6ByH">
-    <img src="https://img.shields.io/discord/1041442427006890014.svg?logo=discord">
-</a>
 <a href="https://crates.io/crates/salvo"><img alt="crates.io" src="https://img.shields.io/crates/v/salvo" /></a>
 <a href="https://docs.rs/salvo"><img alt="Documentation" src="https://docs.rs/salvo/badge.svg" /></a>
+<a href="https://crates.io/crates/salvo"><img alt="Download" src="https://img.shields.io/crates/d/salvo.svg" /></a>
 <a href="https://github.com/rust-secure-code/safety-dance/"><img alt="unsafe forbidden" src="https://img.shields.io/badge/unsafe-forbidden-success.svg" /></a>
-<a href="https://blog.rust-lang.org/2024/07/25/Rust-1.80.0.html"><img alt="Rust Version" src="https://img.shields.io/badge/rust-1.80%2B-blue" /></a>
+<a href="https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html"><img alt="Rust Version" src="https://img.shields.io/badge/rust-1.85%2B-blue" /></a>
 <br>
 <a href="https://salvo.rs">
     <img alt="Website" src="https://img.shields.io/badge/https-salvo.rs-%23f00" />
 </a>
-<a href="https://codecov.io/gh/salvo-rs/salvo"><img alt="codecov" src="https://codecov.io/gh/salvo-rs/salvo/branch/main/graph/badge.svg" /></a>
-<a href="https://crates.io/crates/salvo"><img alt="Download" src="https://img.shields.io/crates/d/salvo.svg" /></a>
-<img alt="License" src="https://img.shields.io/crates/l/salvo.svg" />
+<a href="https://discord.gg/G8KfmS6ByH">
+    <img src="https://img.shields.io/discord/1041442427006890014.svg?logo=discord">
+</a>
+<a href="https://gitcode.com/salvo-rs/salvo">
+    <img src="https://gitcode.com/salvo-rs/salvo/star/badge.svg">
+</a>
+<a href="https://gurubase.io/g/salvo"><img alt="Gurubase" src="https://img.shields.io/badge/Gurubase-Ask%20Salvo%20Guru-006BFF" /></a>
 </p>
 </div>
 
@@ -48,11 +51,13 @@ Salvo is an extremely simple and powerful Rust web backend framework. Only basic
 - Support Tower Service and Layer;
 
 ## ⚡️ Quick Start
+
 You can view samples [here](https://github.com/salvo-rs/salvo/tree/main/examples), or view [official website](https://salvo.rs).
 
 ### Hello World with ACME and HTTP3
 
-**It only takes a few lines of code to implement a server that supports ACME to automatically obtain certificates and supports HTTP1, HTTP2, and HTTP3 protocols.**
+**It only takes a few lines of code to implement a server that supports ACME to automatically obtain certificates, and it
+supports HTTP1, HTTP2, and HTTP3 protocols.**
 
 ```rust
 use salvo::prelude::*;
@@ -76,7 +81,8 @@ async fn main() {
 
 ### Middleware
 
-There is no difference between Handler and Middleware, Middleware is just Handler. **So you can write middlewares without to know concepts like associated type, generic type. You can write middleware if you can write function!!!**
+There is no difference between a Handler and a Middleware, A Middleware is just a Handler. **You can write middleware
+without knowing concepts like associated types and generic types. If you can write a function, then you can write middleware!!!**
 
 ```rust
 use salvo::http::header::{self, HeaderValue};
@@ -95,54 +101,57 @@ Then add it to router:
 Router::new().hoop(add_header).get(hello)
 ```
 
-This is a very simple middleware, it adds `Header` to `Response`, view [full source code](https://github.com/salvo-rs/salvo/blob/main/examples/middleware-add-header/src/main.rs).
+This is a very simple middleware, it adds a `Header` to the `Response`, view [full source code](https://github.com/salvo-rs/salvo/blob/main/examples/middleware-add-header/src/main.rs).
 
 ### Chainable tree routing system
 
-Normally we write routing like this：
+Normally we write routing like this:
 
 ```rust
 Router::with_path("articles").get(list_articles).post(create_article);
-Router::with_path("articles/<id>")
+Router::with_path("articles/{id}")
     .get(show_article)
     .patch(edit_article)
     .delete(delete_article);
 ```
 
-Often viewing articles and article lists does not require user login, but creating, editing, deleting articles, etc. require user login authentication permissions. The tree-like routing system in Salvo can meet this demand. We can write routers without user login together:
+Often, something like viewing articles and article lists does not require user login, but creating, editing, deleting articles, etc. require user login authentication permissions. The tree-like routing system in Salvo can meet this demand. We can write routers without user login together:
 
 ```rust
 Router::with_path("articles")
     .get(list_articles)
-    .push(Router::with_path("<id>").get(show_article));
+    .push(Router::with_path("{id}").get(show_article));
 ```
 
 Then write the routers that require the user to login together, and use the corresponding middleware to verify whether the user is logged in:
+
 ```rust
 Router::with_path("articles")
     .hoop(auth_check)
-    .push(Router::with_path("<id>").patch(edit_article).delete(delete_article));
+    .push(Router::with_path("{id}").patch(edit_article).delete(delete_article));
 ```
 
-Although these two routes have the same `path("articles")`, they can still be added to the same parent route at the same time, so the final route looks like this:
+Although these two routes have the same
+`path("articles")`, they can still be added to the same parent route at the same time, so the final route looks like this:
 
 ```rust
 Router::new()
     .push(
         Router::with_path("articles")
             .get(list_articles)
-            .push(Router::with_path("<id>").get(show_article)),
+            .push(Router::with_path("{id}").get(show_article)),
     )
     .push(
         Router::with_path("articles")
             .hoop(auth_check)
-            .push(Router::with_path("<id>").patch(edit_article).delete(delete_article)),
+            .push(Router::with_path("{id}").patch(edit_article).delete(delete_article)),
     );
 ```
 
-`<id>` matches a fragment in the path, under normal circumstances, the article `id` is just a number, which we can use regular expressions to restrict `id` matching rules, `r"<id:/\d+/>"`.
+`{id}` matches a fragment in the path, under normal circumstances, the article`id` is just a number, which we can use regular expressions to restrict `id` matching rules, `r"{id|\d+}"`.
 
-You can also use `<**>`,  `<*+>` or `<*?>` to match all remaining path fragments. In order to make the code more readable, you can also add appropriate name to make the path semantics more clear, for example: `<**file_path>`.
+You can also use `{**}`,  `{*+}` or`{*?}` to match all remaining path fragments.
+In order to make the code more readable, you can also add appropriate name to make the path semantics more clear, for example: `{**file_path}`.
 
 Some regular expressions for matching paths need to be used frequently, and it can be registered in advance, such as GUID:
 
@@ -156,7 +165,7 @@ PathFilter::register_wisp_regex(
 This makes it more concise when path matching is required:
 
 ```rust
-Router::with_path("<id:guid>").get(index)
+Router::with_path("{id:guid}").get(index)
 ```
 
 View [full source code](https://github.com/salvo-rs/salvo/blob/main/examples/routing-guid/src/main.rs)
@@ -265,21 +274,27 @@ async fn main() {
 ```
 
 ### 🛠️ Salvo CLI
+
 Salvo CLI is a command-line tool that simplifies the creation of new Salvo projects, supporting templates for web APIs, websites, databases (including SQLite, PostgreSQL, and MySQL via SQLx, SeaORM, Diesel, Rbatis), and basic middleware.
 You can use [salvo-cli](https://github.com/salvo-rs/salvo-cli) to create a new Salvo project:
+
 #### install
+
 ```bash
 cargo install salvo-cli
 ```
-#### create a new salvo project
+
+#### create a new Salvo project
+
 ```bash
 salvo new project_name
 ```
+
 ___
 
 ### More Examples
 
-Your can find more examples in [examples](./examples/) folder. You can run these examples with the following command:
+You can find more examples in [examples](./examples/) folder. You can run these examples with the following command:
 
 ```bash
 cd examples

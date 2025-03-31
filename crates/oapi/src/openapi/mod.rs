@@ -24,7 +24,7 @@ use std::fmt::Formatter;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use salvo_core::{async_trait, writing, Depot, FlowCtrl, Handler, Router};
+use salvo_core::{Depot, FlowCtrl, Handler, Router, async_trait, writing};
 use serde::de::{Error, Expected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -49,7 +49,7 @@ pub use self::{
     tag::Tag,
     xml::Xml,
 };
-use crate::{routing::NormNode, Endpoint};
+use crate::{Endpoint, routing::NormNode};
 
 static PATH_PARAMETER_NAME_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\{([^}:]+)").expect("invalid regex"));
@@ -187,9 +187,9 @@ impl OpenApi {
 
     cfg_feature! {
         #![feature ="yaml"]
-        /// Converts this [`OpenApi`] to YAML String. This method essentially calls [`serde_yaml::to_string`] method.
-        pub fn to_yaml(&self) -> Result<String, serde_yaml::Error> {
-            serde_yaml::to_string(self)
+        /// Converts this [`OpenApi`] to YAML String. This method essentially calls [`serde_norway::to_string`] method.
+        pub fn to_yaml(&self) -> Result<String, serde_norway::Error> {
+            serde_norway::to_string(self)
         }
     }
 
@@ -562,7 +562,7 @@ impl<'de> Deserialize<'de> for OpenApiVersion {
     {
         struct VersionVisitor;
 
-        impl<'v> Visitor<'v> for VersionVisitor {
+        impl Visitor<'_> for VersionVisitor {
             type Value = OpenApiVersion;
 
             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -613,11 +613,7 @@ pub enum Deprecated {
 }
 impl From<bool> for Deprecated {
     fn from(b: bool) -> Self {
-        if b {
-            Self::True
-        } else {
-            Self::False
-        }
+        if b { Self::True } else { Self::False }
     }
 }
 
@@ -636,7 +632,7 @@ impl<'de> Deserialize<'de> for Deprecated {
         D: serde::Deserializer<'de>,
     {
         struct BoolVisitor;
-        impl<'de> Visitor<'de> for BoolVisitor {
+        impl Visitor<'_> for BoolVisitor {
             type Value = Deprecated;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -673,11 +669,7 @@ pub enum Required {
 
 impl From<bool> for Required {
     fn from(value: bool) -> Self {
-        if value {
-            Self::True
-        } else {
-            Self::False
-        }
+        if value { Self::True } else { Self::False }
     }
 }
 
@@ -696,7 +688,7 @@ impl<'de> Deserialize<'de> for Required {
         D: serde::Deserializer<'de>,
     {
         struct BoolVisitor;
-        impl<'de> Visitor<'de> for BoolVisitor {
+        impl Visitor<'_> for BoolVisitor {
             type Value = Required;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -736,14 +728,14 @@ mod tests {
     use std::str::FromStr;
 
     use bytes::Bytes;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::{response::Response, *};
     use crate::{
+        ToSchema,
         extract::*,
         security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme},
         server::Server,
-        ToSchema,
     };
 
     use salvo_core::{http::ResBody, prelude::*};

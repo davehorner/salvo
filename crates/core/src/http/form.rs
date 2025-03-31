@@ -3,22 +3,22 @@ use std::ffi::OsStr;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::engine::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::StreamExt;
 use http_body_util::BodyExt;
 use mime::Mime;
 use multer::{Field, Multipart};
 use multimap::MultiMap;
+use rand::TryRngCore;
 use rand::rngs::OsRng;
-use rand::RngCore;
 use tempfile::Builder;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use crate::http::body::ReqBody;
-use crate::http::header::{HeaderMap, CONTENT_TYPE};
 use crate::http::ParseError;
+use crate::http::body::ReqBody;
+use crate::http::header::{CONTENT_TYPE, HeaderMap};
 
 /// The extracted text fields and uploaded files from a `multipart/form-data` request.
 #[derive(Debug)]
@@ -213,9 +213,13 @@ fn text_nonce() -> String {
         Write::write_all(&mut cursor, &secs.to_le_bytes()).expect("write_all failed");
 
         // Get the last bytes from random data
-        OsRng.fill_bytes(&mut raw[12..BYTE_LEN]);
+        OsRng
+            .try_fill_bytes(&mut raw[12..BYTE_LEN])
+            .expect("OsRng.try_fill_bytes failed");
     } else {
-        OsRng.fill_bytes(&mut raw[..]);
+        OsRng
+            .try_fill_bytes(&mut raw[..])
+            .expect("OsRng.try_fill_bytes failed");
     }
 
     // base64 encode
